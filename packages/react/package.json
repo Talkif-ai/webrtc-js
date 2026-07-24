@@ -1,0 +1,40 @@
+{
+	"name": "@talkif/webrtc-react",
+	"version": "0.1.0",
+	"description": "React bindings for @talkif/webrtc — headless hook for Talkif voice sessions",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Talkif-ai/webrtc-js.git",
+		"directory": "packages/react"
+	},
+	"type": "module",
+	"main": "./dist/index.cjs",
+	"module": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"require": "./dist/index.cjs"
+		}
+	},
+	"files": ["dist"],
+	"sideEffects": false,
+	"scripts": {
+		"build": "tsup src/index.ts --format esm,cjs --dts --sourcemap --clean --external react,@talkif/webrtc",
+		"dev": "tsup src/index.ts --format esm --dts --watch --external react,@talkif/webrtc",
+		"type-check": "tsc --noEmit"
+	},
+	"peerDependencies": {
+		"@talkif/webrtc": "workspace:^",
+		"react": ">=18"
+	},
+	"devDependencies": {
+		"@talkif/webrtc": "workspace:*",
+		"@types/react": "^19.1.0",
+		"react": "^19.1.0",
+		"tsup": "^8.4.0",
+		"typescript": "^5.8.3"
+	}
+}
