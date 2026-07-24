@@ -1,6 +1,6 @@
 {
 	"name": "@talkif/webrtc-react",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "React bindings for @talkif/webrtc — headless hook for Talkif voice sessions",
 	"license": "MIT",
 	"repository": {
