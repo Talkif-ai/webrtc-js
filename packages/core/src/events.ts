@@ -35,7 +35,6 @@ export class CallEventsClient {
 	private ws: WebSocket | null = null;
 	private closed = false;
 	private attempts = 0;
-	private everConnected = false;
 	private lastSeq = 0;
 	private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -79,10 +78,9 @@ export class CallEventsClient {
 
 		ws.onopen = () => {
 			ws.send(JSON.stringify({ type: 'auth', token }));
-			// Auto-bound to the session's call; replay recovers a reconnect gap.
-			ws.send(
-				JSON.stringify({ type: 'subscribe', ...(this.everConnected ? { replay: true } : {}) })
-			);
+			// Replay recovers anything emitted before this subscribe landed
+			// (the opening word) and anything shed during a reconnect gap.
+			ws.send(JSON.stringify({ type: 'subscribe', replay: true }));
 		};
 
 		ws.onmessage = (message: MessageEvent) => {
@@ -96,7 +94,6 @@ export class CallEventsClient {
 			if (typeof envelope.type !== 'string' || typeof envelope.seq !== 'number') return;
 
 			if (envelope.type === 'subscribed') {
-				this.everConnected = true;
 				this.attempts = 0;
 				this.lastSeq = envelope.seq;
 				return;

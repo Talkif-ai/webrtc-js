@@ -184,6 +184,11 @@ export class TalkifCall {
 			this.localStream = local.stream;
 			this.setState('connecting');
 
+			// Subscribe to events before the media handshake so the WS is
+			// listening before the bot speaks (the session→call mapping already
+			// exists once create-call returns).
+			this.connectEvents();
+
 			this.pc.ontrack = (event) => {
 				const stream = event.streams[0];
 				if (!stream) return;
@@ -214,7 +219,6 @@ export class TalkifCall {
 			this.emitter.emit('connected', { callId: callResponse.callId, botId: this._botId });
 			this.startDurationTimer();
 			this.armHealthWatchdog(callResponse.callId);
-			this.connectEvents();
 		} catch (error) {
 			this.fail(
 				error instanceof TalkifCallError ? error : asSignalingCallError(error)
@@ -392,7 +396,10 @@ export class TalkifCall {
 			case 'tts_word': {
 				const word = typeof event.data.word === 'string' ? event.data.word : '';
 				if (!word) break;
-				const ptsMs = typeof event.data.pts_ms === 'number' ? event.data.pts_ms : null;
+				// Backend serializes camelCase (`ptsMs`); accept snake_case too
+				// for resilience against older/other emitters.
+				const ptsRaw = event.data.ptsMs ?? event.data.pts_ms;
+				const ptsMs = typeof ptsRaw === 'number' ? ptsRaw : null;
 				const timestamp = typeof event.data.timestamp === 'number' ? event.data.timestamp : 0;
 				this.emitter.emit('ttsword', { word, ptsMs, timestamp, data: event.data });
 				break;
