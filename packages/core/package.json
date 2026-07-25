@@ -1,6 +1,6 @@
 {
 	"name": "@talkif/webrtc",
-	"version": "0.1.1",
+	"version": "0.1.2",
 	"description": "Talkif WebRTC client — voice + text sessions with Talkif AI agents from the browser",
 	"license": "MIT",
 	"repository": {
