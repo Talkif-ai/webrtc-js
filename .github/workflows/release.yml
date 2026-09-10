@@ -23,15 +23,16 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       # Trusted Publishing (OIDC) needs npm CLI >= 11.5.1; Node 22 bundles 10.x.
       - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
       - run: pnpm type-check
+      # `pnpm pack` rewrites `workspace:^` peer deps to real semver; `npm publish`
+      # of the tarball authenticates via OIDC (no registry-url/token in .npmrc).
       # Core first: the react package peer-depends on it.
-      - run: pnpm publish --access public --no-git-checks --provenance
+      - run: pnpm pack && npm publish ./*.tgz --access public --provenance
         working-directory: packages/core
-      - run: pnpm publish --access public --no-git-checks --provenance
+      - run: pnpm pack && npm publish ./*.tgz --access public --provenance
         working-directory: packages/react
