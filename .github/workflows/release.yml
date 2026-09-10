@@ -1,9 +1,9 @@
 name: Release
 
 # Publishes both packages to npm when a version tag (v*) is pushed.
-# Auth: NPM_TOKEN repository secret (granular access token, read/write on
-# the talkif org packages). Provenance links each published version to the
-# exact commit and workflow run that built it.
+# Auth: npm Trusted Publishing (OIDC) — each package on npmjs.com trusts this
+# repo + workflow file; no token secret is involved. Provenance links each
+# published version to the exact commit and workflow run that built it.
 
 on:
   push:
@@ -24,6 +24,8 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # Trusted Publishing (OIDC) needs npm CLI >= 11.5.1; Node 22 bundles 10.x.
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm test
@@ -31,9 +33,5 @@ jobs:
       # Core first: the react package peer-depends on it.
       - run: pnpm publish --access public --no-git-checks --provenance
         working-directory: packages/core
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - run: pnpm publish --access public --no-git-checks --provenance
         working-directory: packages/react
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
