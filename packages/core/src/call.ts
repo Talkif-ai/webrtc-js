@@ -26,6 +26,17 @@ const PIPELINE_HEALTH_TIMEOUT_MS = 15_000;
 // waiting for iceGatheringState === 'complete' would stall every call.
 const ICE_FIRST_RELAY_TIMEOUT_MS = 1_500;
 
+// `connectionState === 'disconnected'` is transient: it fires during any
+// normal teardown (the agent hanging up) and on brief network blips, and
+// often beats the peer-left / terminal-status signals to the browser. Give
+// the link a chance to recover, or the clean end-of-call signal a chance to
+// arrive, before declaring the connection dead.
+const CONNECTION_DISCONNECTED_GRACE_MS = 4_000;
+// `failed` is definitive for the media plane, but a terminal `status` event
+// may still be in flight — hold the events channel open briefly so a normal
+// hangup surfaces as `ended`, not `error`.
+const CONNECTION_FAILED_GRACE_MS = 1_500;
+
 /**
  * One WebRTC voice session with a Talkif agent.
  *
@@ -47,6 +58,8 @@ export class TalkifCall {
 
 	private durationTimer: ReturnType<typeof setInterval> | null = null;
 	private healthTimer: ReturnType<typeof setTimeout> | null = null;
+	private connectionFailTimer: ReturnType<typeof setTimeout> | null = null;
+	private connectionFailPendingMs = Infinity;
 	private pipelineConfirmed = false;
 	private renegotiating = false;
 
@@ -197,9 +210,18 @@ export class TalkifCall {
 			};
 
 			this.pc.onconnectionstatechange = () => {
-				const state = this.pc?.connectionState;
-				if (state === 'failed' || state === 'disconnected') {
-					this.fail(new TalkifCallError('connection-failed', 'WebRTC connection failed'));
+				switch (this.pc?.connectionState) {
+					case 'connected':
+						this.clearConnectionFailTimer();
+						break;
+					case 'disconnected':
+						this.scheduleConnectionFailure(CONNECTION_DISCONNECTED_GRACE_MS);
+						break;
+					case 'failed':
+						this.scheduleConnectionFailure(CONNECTION_FAILED_GRACE_MS);
+						break;
+					default:
+						break;
 				}
 			};
 
@@ -405,8 +427,11 @@ export class TalkifCall {
 				break;
 			}
 			case 'status': {
-				const status = typeof event.data.status === 'string' ? event.data.status : '';
-				if (TERMINAL_CALL_STATUSES.has(status.toUpperCase() as never)) {
+				const status = typeof event.data.status === 'string' ? event.data.status.toUpperCase() : '';
+				// The realtime stream reports `ENDED` when the agent's pipeline
+				// finishes; the REST status set (COMPLETED/FAILED/…) alone misses
+				// it, leaving the call live with the duration timer ticking.
+				if (TERMINAL_CALL_STATUSES.has(status as never) || status === 'ENDED') {
 					this.endedExternally();
 				}
 				break;
@@ -467,6 +492,30 @@ export class TalkifCall {
 		}, 1_000);
 	}
 
+	/**
+	 * Arm (or shorten) the deadline after which a degraded media link is
+	 * treated as a hard failure. Cancelled by recovery to `connected` or by
+	 * any clean end (peer-left, terminal status, local hangup).
+	 */
+	private scheduleConnectionFailure(delayMs: number): void {
+		if (this._state !== 'connecting' && this._state !== 'connected') return;
+		if (this.connectionFailTimer && delayMs >= this.connectionFailPendingMs) return;
+		this.clearConnectionFailTimer();
+		this.connectionFailPendingMs = delayMs;
+		this.connectionFailTimer = setTimeout(() => {
+			this.connectionFailTimer = null;
+			this.fail(new TalkifCallError('connection-failed', 'WebRTC connection failed'));
+		}, delayMs);
+	}
+
+	private clearConnectionFailTimer(): void {
+		if (this.connectionFailTimer) {
+			clearTimeout(this.connectionFailTimer);
+			this.connectionFailTimer = null;
+		}
+		this.connectionFailPendingMs = Infinity;
+	}
+
 	private fail(error: TalkifCallError): void {
 		if (this._state === 'ended' || this._state === 'error') return;
 		this.teardown();
@@ -482,6 +531,7 @@ export class TalkifCall {
 	}
 
 	private teardown(): void {
+		this.clearConnectionFailTimer();
 		this.events?.close();
 		this.events = null;
 
