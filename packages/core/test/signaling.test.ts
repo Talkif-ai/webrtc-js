@@ -20,16 +20,18 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe('SignalingClient', () => {
-	it('builds account-scoped URLs and sends auth headers', async () => {
+	it('builds root-scoped URLs and sends auth + account headers', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { iceServers: [], ttl: 3600 }));
 		const client = makeClient(fetchMock as unknown as typeof fetch);
 
 		await client.getIceServers();
 
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe('https://api.talkif.ai/api/v1/accounts/acc-1/calls/webrtc/ice-servers');
+		expect(url).toBe('https://api.talkif.ai/api/v1/calls/webrtc/ice-servers');
 		expect(init.method).toBe('GET');
 		expect((init.headers as Record<string, string>)['authorization']).toBe('Bearer test-token');
+		// The account is no longer in the path: a JWT caller must name it by header.
+		expect((init.headers as Record<string, string>)['x-account-id']).toBe('acc-1');
 	});
 
 	it('POSTs the offer to the call-scoped path', async () => {
@@ -41,7 +43,7 @@ describe('SignalingClient', () => {
 		const answer = await client.sendOffer('call-9', { sdp: 'v=0offer', iceServers: [] });
 
 		const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-		expect(url).toBe('https://api.talkif.ai/api/v1/accounts/acc-1/calls/webrtc/call-9/offer');
+		expect(url).toBe('https://api.talkif.ai/api/v1/calls/webrtc/call-9/offer');
 		expect(init.method).toBe('POST');
 		expect(JSON.parse(init.body as string)).toEqual({ sdp: 'v=0offer', iceServers: [] });
 		expect(answer.botId).toBe('bot-1');
