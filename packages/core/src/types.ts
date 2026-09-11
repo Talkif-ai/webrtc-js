@@ -1,6 +1,6 @@
 /**
- * Wire types for the Talkif WebRTC signaling API and the pipecat SmallWebRTC
- * data-channel protocol spoken by Talkif voice bots.
+ * Wire types for the Talkif WebRTC signaling API and the data-channel
+ * protocol spoken by Talkif voice bots.
  *
  * These shapes are the public contract. Field casing matches the backend JSON
  * exactly (camelCase over HTTP).
@@ -93,7 +93,7 @@ export interface OfferResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Data-channel protocol (pipecat SmallWebRTC — bot side)
+// Data-channel protocol (bot side)
 // ---------------------------------------------------------------------------
 
 /** Bot → client: bot requests a new offer/answer cycle. */
@@ -283,6 +283,10 @@ export type AuthProvider = () => string | Promise<string>;
 export interface TalkifClientConfig {
 	/** API origin, e.g. `https://api.talkif.ai`. No trailing slash. */
 	baseUrl: string;
+	/**
+	 * Account to act on. Sent as `X-Account-Id`; required when `auth` yields a
+	 * user JWT (users can span accounts), redundant but harmless for API keys.
+	 */
 	accountId: string;
 	auth: AuthProvider;
 	/** Override fetch (tests, SSR polyfills). Defaults to global fetch. */

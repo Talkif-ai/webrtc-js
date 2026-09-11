@@ -121,7 +121,9 @@ export class PublicSession {
 
 /**
  * Thin HTTP client for the Talkif WebRTC signaling routes. Two modes:
- * - authenticated (dashboard/API): `/api/v1/accounts/{accountId}/calls/webrtc`
+ * - authenticated (dashboard/API): `/api/v1/calls/webrtc`. The account is
+ *   implied by an API key; a JWT must name it via the `X-Account-Id` header,
+ *   so `accountId` is sent on every request (harmless for API keys).
  * - public (embed): `/api/v1/public/calls`, session token minted from the
  *   publishable key and refreshed transparently.
  */
@@ -143,7 +145,7 @@ export class SignalingClient {
 		if (isPublicConfig(this.config)) {
 			return `${baseUrl}/api/v1/public/calls`;
 		}
-		return `${baseUrl}/api/v1/accounts/${this.config.accountId}/calls/webrtc`;
+		return `${baseUrl}/api/v1/calls/webrtc`;
 	}
 
 	private async authorization(): Promise<string> {
@@ -165,6 +167,7 @@ export class SignalingClient {
 			method,
 			headers: {
 				authorization,
+				...(isPublicConfig(this.config) ? {} : { 'x-account-id': this.config.accountId }),
 				...(body !== undefined ? { 'content-type': 'application/json' } : {}),
 			},
 			...(body !== undefined ? { body: JSON.stringify(body) } : {}),

@@ -8,7 +8,7 @@ export interface DataChannelHandlers {
 }
 
 /**
- * Client side of the pipecat SmallWebRTC data-channel protocol:
+ * Client side of the Talkif voice-bot data-channel protocol:
  *
  * - `"ping"` strings every 2s keep the bot's liveness check happy (the bot
  *   treats a connection as active when the last ping is <3s old, with the
@@ -23,7 +23,7 @@ export class DataChannel {
 
 	constructor(pc: RTCPeerConnection, handlers: DataChannelHandlers) {
 		this.handlers = handlers;
-		this.channel = pc.createDataChannel('pipecat', { ordered: true });
+		this.channel = pc.createDataChannel('talkif', { ordered: true });
 		this.channel.onopen = () => this.startKeepalive();
 		this.channel.onclose = () => this.stopKeepalive();
 		this.channel.onmessage = (event) => this.handleMessage(event.data);
