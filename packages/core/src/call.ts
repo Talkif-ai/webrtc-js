@@ -64,6 +64,7 @@ export class TalkifCall {
 	private renegotiating = false;
 
 	private _state: CallState = 'idle';
+	private disposed = false;
 	private _callId: string | null = null;
 	private _botId: string | null = null;
 	private _muted = false;
@@ -153,11 +154,19 @@ export class TalkifCall {
 		this.teardown();
 		this.setState('ended');
 		this.emitter.emit('ended', { reason: 'local-hangup' });
+		// A call that already exists server-side gets an explicit end so the
+		// agent stops now rather than on ICE timeout. While still `requesting`
+		// there is no id yet; start() sends it once creation resolves.
+		if (this._callId) this.notifyEnded(this._callId);
 	}
 
 	/** Full teardown regardless of state — safe to call multiple times. */
 	dispose(): void {
+		this.disposed = true;
+		// Disposing a live call (component unmount) must still end it server-side.
+		const live = this._callId !== null && (this._state === 'connecting' || this._state === 'connected');
 		this.teardown();
+		if (live && this._callId) this.notifyEnded(this._callId);
 		this.signaling.session?.dispose();
 		this.emitter.removeAll();
 	}
@@ -191,6 +200,15 @@ export class TalkifCall {
 						}),
 				this.prepareLocal(options),
 			]);
+
+			// hangup()/dispose() may have run while we were awaiting: they found
+			// nothing to tear down yet, so release the media we just acquired and
+			// stop here instead of resurrecting a call the user already ended.
+			if (this.isAborted()) {
+				releaseLocal(local);
+				this.notifyEnded(callResponse.callId);
+				return;
+			}
 
 			this._callId = callResponse.callId;
 			this.pc = local.pc;
@@ -234,7 +252,10 @@ export class TalkifCall {
 				sdp: this.mustLocalSdp(),
 				iceServers: this.iceServers,
 			});
+			// Hung up while the offer was in flight: teardown() already closed pc.
+			if (this.isAborted()) return;
 			await this.pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
+			if (this.isAborted()) return;
 			this._botId = answer.botId ?? null;
 
 			this.setState('connected');
@@ -242,6 +263,8 @@ export class TalkifCall {
 			this.startDurationTimer();
 			this.armHealthWatchdog(callResponse.callId);
 		} catch (error) {
+			// The user already hung up; whatever failed afterwards is not theirs to handle.
+			if (this.isAborted()) return;
 			this.fail(
 				error instanceof TalkifCallError ? error : asSignalingCallError(error)
 			);
@@ -523,6 +546,19 @@ export class TalkifCall {
 		this.emitter.emit('error', { error });
 	}
 
+	/** Fire-and-forget end-call to the backend; the local call is already ended. */
+	private notifyEnded(callId: string): void {
+		this.signaling.endCall(callId).catch(() => {
+			// Nothing to surface: the local state is final and the backend
+			// still ends the call on ICE timeout.
+		});
+	}
+
+	/** True once hangup(), dispose() or fail() has run — start() must not continue past an await. */
+	private isAborted(): boolean {
+		return this.disposed || this._state === 'ended' || this._state === 'error';
+	}
+
 	private setState(state: CallState): void {
 		const previous = this._state;
 		if (previous === state) return;
@@ -567,6 +603,12 @@ export class TalkifCall {
 			this.pc = null;
 		}
 	}
+}
+
+/** Release media acquired by prepareLocal() that never got attached to the call. */
+function releaseLocal(local: { pc: RTCPeerConnection; stream: MediaStream }): void {
+	for (const track of local.stream.getTracks()) track.stop();
+	local.pc.close();
 }
 
 export type { CallEndReason };

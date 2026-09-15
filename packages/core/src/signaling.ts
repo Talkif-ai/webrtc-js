@@ -161,9 +161,18 @@ export class SignalingClient {
 		body?: unknown,
 		retriedAuth = false
 	): Promise<T> {
+		return this.requestUrl(method, `${this.base}${path}`, body, retriedAuth);
+	}
+
+	private async requestUrl<T>(
+		method: 'GET' | 'POST',
+		url: string,
+		body?: unknown,
+		retriedAuth = false
+	): Promise<T> {
 		const doFetch = this.config.fetch ?? fetch;
 		const authorization = await this.authorization();
-		const response = await doFetch(`${this.base}${path}`, {
+		const response = await doFetch(url, {
 			method,
 			headers: {
 				authorization,
@@ -177,7 +186,7 @@ export class SignalingClient {
 		// re-exchange + retry before surfacing the failure.
 		if (response.status === 401 && this.session && !retriedAuth) {
 			this.session.invalidate();
-			return this.request(method, path, body, true);
+			return this.requestUrl(method, url, body, true);
 		}
 
 		let parsed: unknown = null;
@@ -196,7 +205,7 @@ export class SignalingClient {
 					? String((parsed as { detail: unknown }).detail)
 					: typeof parsed === 'object' && parsed !== null && 'message' in parsed
 						? String((parsed as { message: unknown }).message)
-						: `Signaling request failed: ${method} ${path} → ${response.status}`;
+						: `Signaling request failed: ${method} ${url} → ${response.status}`;
 			throw new SignalingError(response.status, message, parsed);
 		}
 		return parsed as T;
@@ -232,6 +241,14 @@ export class SignalingClient {
 	getCall(callId: string): Promise<WebRTCCall> {
 		const path = this.isPublic ? `/calls/${callId}` : `/${callId}`;
 		return this.request('GET', path);
+	}
+
+	/** Tell the backend the browser hung up so the agent stops immediately. */
+	endCall(callId: string): Promise<void> {
+		if (this.isPublic) return this.request('POST', `/calls/${callId}/end`);
+		// Authenticated end-call lives on the generic calls resource, not under /webrtc.
+		const baseUrl = this.config.baseUrl.replace(/\/$/, '');
+		return this.requestUrl('POST', `${baseUrl}/api/v1/calls/${callId}/end`);
 	}
 }
 

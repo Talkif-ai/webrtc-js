@@ -66,7 +66,7 @@ call.hangup();
 | Member | Description |
 |---|---|
 | `start(options)` | Request mic, create the call, connect. `options`: `flowId`, `draftDefinition` (authenticated test calls), `metadata`, `audio` (getUserMedia constraints), `audioElement` (your own `<audio>`, or `null` to handle the `track` event yourself) |
-| `hangup()` | End the call locally. Always safe to call. |
+| `hangup()` | End the call and notify the agent. Always safe to call, including while `start()` is still pending. |
 | `dispose()` | Tear everything down (mic, peer connection, timers, listeners). Instances are single-use. |
 | `setMuted(muted)` | Toggle the local microphone track. |
 | `sendAppMessage(json)` | Send an arbitrary JSON message to the bot over the data channel. Returns `false` if the channel isn't open. |
