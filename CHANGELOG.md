@@ -8,6 +8,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-10-02
+
+### Changed
+
+- Embed (publishable-key) calls use the documented paths: `POST /api/v1/public/calls`,
+  `GET /api/v1/public/calls/{callId}`, `POST /api/v1/public/calls/{callId}/offer` and
+  `POST /api/v1/public/calls/{callId}/end`. Earlier versions call the older
+  `/api/v1/public/calls/calls/...` paths, which keep working, so upgrading is optional.
+
 ## [0.1.5] — 2026-09-15
 
 ### Fixed
@@ -66,7 +75,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   publishable-key modes, realtime transcript/TTS/call events, mute, data-channel app
   messages; `@talkif/webrtc-react` headless `useTalkifCall` hook.
 
-[Unreleased]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.2...v0.1.3

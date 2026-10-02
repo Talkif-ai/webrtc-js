@@ -212,11 +212,8 @@ export class SignalingClient {
 	}
 
 	createCall(body: CreateCallRequest): Promise<CreateCallResponse> {
-		if (this.isPublic) {
-			// Flow is bound to the publishable key server-side; body is empty.
-			return this.request('POST', '/calls', {});
-		}
-		return this.request('POST', '', body);
+		// Public: the flow is bound to the publishable key server-side; body is empty.
+		return this.request('POST', '', this.isPublic ? {} : body);
 	}
 
 	createTestCall(body: CreateTestCallRequest): Promise<CreateCallResponse> {
@@ -234,18 +231,16 @@ export class SignalingClient {
 	}
 
 	sendOffer(callId: string, body: OfferRequest): Promise<OfferResponse> {
-		const path = this.isPublic ? `/calls/${callId}/offer` : `/${callId}/offer`;
-		return this.request('POST', path, body);
+		return this.request('POST', `/${callId}/offer`, body);
 	}
 
 	getCall(callId: string): Promise<WebRTCCall> {
-		const path = this.isPublic ? `/calls/${callId}` : `/${callId}`;
-		return this.request('GET', path);
+		return this.request('GET', `/${callId}`);
 	}
 
 	/** Tell the backend the browser hung up so the agent stops immediately. */
 	endCall(callId: string): Promise<void> {
-		if (this.isPublic) return this.request('POST', `/calls/${callId}/end`);
+		if (this.isPublic) return this.request('POST', `/${callId}/end`);
 		// Authenticated end-call lives on the generic calls resource, not under /webrtc.
 		const baseUrl = this.config.baseUrl.replace(/\/$/, '');
 		return this.requestUrl('POST', `${baseUrl}/api/v1/calls/${callId}/end`);
