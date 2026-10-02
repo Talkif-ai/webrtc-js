@@ -80,7 +80,7 @@ function fetchStub(): typeof fetch {
 		}
 		if (url.endsWith('/ice-servers')) return jsonResponse({ iceServers: [], ttl: 3600 });
 		if (url.endsWith('/offer')) return jsonResponse({ sdp: 'v=0 answer', sdpType: 'answer', botId: 'bot-1' });
-		if (url.endsWith('/public/calls/calls')) {
+		if (url.endsWith('/public/calls')) {
 			return jsonResponse({ callId: 'call-1', flowId: 'flow-1', status: 'IN_PROGRESS' });
 		}
 		throw new Error(`unexpected fetch ${url}`);
@@ -245,7 +245,7 @@ function deferredFetchStub(): { fetch: typeof fetch; release: () => void; ended:
 		}
 		if (url.endsWith('/ice-servers')) return jsonResponse({ iceServers: [], ttl: 3600 });
 		if (url.endsWith('/offer')) return jsonResponse({ sdp: 'v=0 answer', sdpType: 'answer', botId: 'bot-1' });
-		if (url.endsWith('/public/calls/calls')) {
+		if (url.endsWith('/public/calls')) {
 			await gate;
 			return jsonResponse({ callId: 'call-1', flowId: 'flow-1', status: 'IN_PROGRESS' });
 		}
@@ -307,7 +307,7 @@ describe('TalkifCall hangup during start()', () => {
 		expect(FakeWebSocket.instances).toHaveLength(0);
 		// The bot was assigned server-side even though no offer was sent: end it.
 		await vi.advanceTimersByTimeAsync(0);
-		expect(endedCalls).toEqual(['https://api.talkif.ai/api/v1/public/calls/calls/call-1/end']);
+		expect(endedCalls).toEqual(['https://api.talkif.ai/api/v1/public/calls/call-1/end']);
 	});
 
 	it('dispose while requesting releases the mic and stays silent', async () => {
@@ -361,6 +361,6 @@ describe('TalkifCall hangup during start()', () => {
 		await vi.advanceTimersByTimeAsync(0);
 
 		expect(ended).toEqual([{ reason: 'local-hangup' }]);
-		expect(endedCalls).toEqual(['https://api.talkif.ai/api/v1/public/calls/calls/call-1/end']);
+		expect(endedCalls).toEqual(['https://api.talkif.ai/api/v1/public/calls/call-1/end']);
 	});
 });
