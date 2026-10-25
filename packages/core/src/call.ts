@@ -7,6 +7,7 @@ import type {
 	CallEndReason,
 	CallEventEnvelope,
 	CallState,
+	CreateCallResponse,
 	IceServer,
 	SignallingPayload,
 	StartCallOptions,
@@ -183,11 +184,24 @@ export class TalkifCall {
 			throw new TalkifCallError('signaling-failed', 'flowId is required in authenticated mode');
 		}
 
+		// Set once creation is under way: a start() that fails after this point
+		// ends the created call so its agent stops waiting for an offer.
+		let created: Promise<CreateCallResponse> | null = null;
+
 		try {
+			// Microphone first. Creating the call reserves an agent that waits for
+			// our offer; it must not wait on a permission prompt the user may
+			// dismiss or deny. A denied mic now fails before any call exists.
+			const stream = await acquireMicrophone(options);
+			if (this.isAborted()) {
+				for (const track of stream.getTracks()) track.stop();
+				return;
+			}
+
 			// Run bot warmup (create call → bot assignment, 2-5s) in parallel with
-			// local setup (ICE fetch, mic, offer, candidate gathering).
+			// local setup (ICE fetch, offer, candidate gathering).
 			const flowId = options.flowId ?? '';
-			const [callResponse, local] = await Promise.all([
+			created =
 				options.draftDefinition !== undefined
 					? this.signaling.createTestCall({
 							flowId,
@@ -197,9 +211,8 @@ export class TalkifCall {
 					: this.signaling.createCall({
 							flowId,
 							...(options.metadata !== undefined ? { metadata: options.metadata } : {}),
-						}),
-				this.prepareLocal(options),
-			]);
+						});
+			const [callResponse, local] = await Promise.all([created, this.prepareLocal(stream)]);
 
 			// hangup()/dispose() may have run while we were awaiting: they found
 			// nothing to tear down yet, so release the media we just acquired and
@@ -265,6 +278,9 @@ export class TalkifCall {
 		} catch (error) {
 			// The user already hung up; whatever failed afterwards is not theirs to handle.
 			if (this.isAborted()) return;
+			// The call exists but will never connect: end it now instead of leaving
+			// its agent to time out. A failed creation reserved nothing.
+			created?.then(({ callId }) => this.notifyEnded(callId)).catch(() => {});
 			this.fail(
 				error instanceof TalkifCallError ? error : asSignalingCallError(error)
 			);
@@ -272,18 +288,16 @@ export class TalkifCall {
 		}
 	}
 
-	private async prepareLocal(options: StartCallOptions): Promise<{ pc: RTCPeerConnection; stream: MediaStream }> {
-		const { iceServers } = await this.signaling.getIceServers();
-		this.iceServers = iceServers;
-
-		if (!navigator.mediaDevices?.getUserMedia) {
-			throw new TalkifCallError('media-unavailable', 'Microphone access unavailable. This requires HTTPS or localhost.');
+	private async prepareLocal(stream: MediaStream): Promise<{ pc: RTCPeerConnection; stream: MediaStream }> {
+		let iceServers: IceServer[];
+		try {
+			({ iceServers } = await this.signaling.getIceServers());
+		} catch (error) {
+			// The mic is not attached to the call yet; teardown() would not stop it.
+			for (const track of stream.getTracks()) track.stop();
+			throw error;
 		}
-		const stream = await navigator.mediaDevices
-			.getUserMedia({ audio: options.audio ?? true })
-			.catch((cause: unknown) => {
-				throw new TalkifCallError('media-unavailable', 'Microphone permission denied or unavailable', cause);
-			});
+		this.iceServers = iceServers;
 
 		// Relay-only transport: skips host/srflx gathering (no dead-interface
 		// timeouts), works through firewalls that block UDP, avoids TURN
@@ -603,6 +617,16 @@ export class TalkifCall {
 			this.pc = null;
 		}
 	}
+}
+
+/** Ask for the microphone; a refusal or missing device becomes `media-unavailable`. */
+async function acquireMicrophone(options: StartCallOptions): Promise<MediaStream> {
+	if (!navigator.mediaDevices?.getUserMedia) {
+		throw new TalkifCallError('media-unavailable', 'Microphone access unavailable. This requires HTTPS or localhost.');
+	}
+	return navigator.mediaDevices.getUserMedia({ audio: options.audio ?? true }).catch((cause: unknown) => {
+		throw new TalkifCallError('media-unavailable', 'Microphone permission denied or unavailable', cause);
+	});
 }
 
 /** Release media acquired by prepareLocal() that never got attached to the call. */
