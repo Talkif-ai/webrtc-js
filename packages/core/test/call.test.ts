@@ -350,6 +350,48 @@ describe('TalkifCall hangup during start()', () => {
 		expect(endedCalls).toHaveLength(1);
 	});
 
+	it('a denied microphone fails before any call is created', async () => {
+		const fetchImpl = vi.fn(fetchStub());
+		vi.stubGlobal('navigator', {
+			mediaDevices: {
+				getUserMedia: async () => {
+					throw new DOMException('Permission denied', 'NotAllowedError');
+				},
+			},
+		});
+		const { call, states } = makeCall(fetchImpl as unknown as typeof fetch);
+
+		await expect(call.start({ audioElement: null })).rejects.toMatchObject({ code: 'media-unavailable' });
+
+		expect(states).toEqual(['requesting', 'error']);
+		// No agent was reserved for a call that could never connect.
+		const urls = fetchImpl.mock.calls.map(([input]) => String(input));
+		expect(urls.some((url) => url.endsWith('/public/calls'))).toBe(false);
+		expect(FakePeerConnection.instances).toHaveLength(0);
+	});
+
+	it('a setup failure after creation ends the created call and releases the mic', async () => {
+		const base = fetchStub();
+		const ended: string[] = [];
+		const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = String(input);
+			if (url.endsWith('/ice-servers')) throw new TypeError('network down');
+			if (url.endsWith('/end')) {
+				ended.push(url);
+				return jsonResponse({});
+			}
+			return base(input, init);
+		}) as typeof fetch;
+		const { call, states } = makeCall(fetchImpl);
+
+		await expect(call.start({ audioElement: null })).rejects.toBeDefined();
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(states).toEqual(['requesting', 'error']);
+		expect(track.stopped).toBe(true);
+		expect(ended).toEqual(['https://api.talkif.ai/api/v1/public/calls/call-1/end']);
+	});
+
 	it('hangup on a connected call sends end-call to the backend', async () => {
 		const { fetch, release, ended: endedCalls } = deferredFetchStub();
 		const { call, ended } = makeCall(fetch);

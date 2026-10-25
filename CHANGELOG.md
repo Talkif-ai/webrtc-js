@@ -8,6 +8,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-10-25
+
+### Fixed
+
+- `start()` asks for the microphone before it creates the call. A denied, missing or
+  busy microphone now fails with `media-unavailable` before anything is created, instead
+  of leaving a call whose agent waited about a minute for a connection that never came.
+- When `start()` fails after the call was created (for example, the ICE-server request
+  fails), the call is now ended (`POST .../calls/{id}/end`) and the microphone is released.
+
 ## [0.1.6] — 2026-10-02
 
 ### Changed
@@ -75,7 +85,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   publishable-key modes, realtime transcript/TTS/call events, mute, data-channel app
   messages; `@talkif/webrtc-react` headless `useTalkifCall` hook.
 
-[Unreleased]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Talkif-ai/webrtc-js/compare/v0.1.3...v0.1.4
