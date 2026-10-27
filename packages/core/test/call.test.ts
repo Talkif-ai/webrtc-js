@@ -6,8 +6,13 @@ import type { TalkifPublicClientConfig } from '../src/types.js';
  * Minimal RTCPeerConnection double: enough surface for TalkifCall.start()
  * plus a `setConnectionState` knob to drive `onconnectionstatechange`.
  */
+// An offer the relay can reach: it carries a relay (TURN) candidate.
+const RELAY_OFFER = 'v=0 offer\r\na=candidate:1 1 udp 41885439 203.0.113.7 51000 typ relay raddr 0.0.0.0 rport 0';
+
 class FakePeerConnection {
 	static instances: FakePeerConnection[] = [];
+	/** The SDP the next offer carries; set to one without a relay candidate to test that path. */
+	static offerSdp = RELAY_OFFER;
 	connectionState: RTCPeerConnectionState = 'new';
 	iceGatheringState: RTCIceGatheringState = 'complete';
 	localDescription: { sdp: string } | null = null;
@@ -25,7 +30,7 @@ class FakePeerConnection {
 		return { onopen: null, onmessage: null, onclose: null, readyState: 'open', send() {}, close() {} };
 	}
 	async createOffer(): Promise<{ type: 'offer'; sdp: string }> {
-		return { type: 'offer', sdp: 'v=0 offer' };
+		return { type: 'offer', sdp: FakePeerConnection.offerSdp };
 	}
 	async setLocalDescription(desc: { sdp: string }): Promise<void> {
 		this.localDescription = desc;
@@ -135,6 +140,17 @@ describe('TalkifCall end-of-call handling', () => {
 	afterEach(() => {
 		vi.unstubAllGlobals();
 		vi.useRealTimers();
+		FakePeerConnection.offerSdp = RELAY_OFFER;
+	});
+
+	it('fails with connection-failed instead of sending an offer without a relay candidate', async () => {
+		// Gathering finished with host candidates only: nothing the relay could reach.
+		FakePeerConnection.offerSdp = 'v=0 offer\r\na=candidate:1 1 udp 2122260223 192.168.1.5 50000 typ host';
+		const call = new TalkifCall({ baseUrl: 'https://api.talkif.ai', publishableKey: 'pk_test', fetch: fetchStub() });
+		const errors: unknown[] = [];
+		call.on('error', (p) => errors.push(p));
+		await expect(call.start({ audioElement: null })).rejects.toMatchObject({ code: 'connection-failed' });
+		expect(FakePeerConnection.instances[0]?.closed).toBe(true);
 	});
 
 	it('ends cleanly on the ENDED realtime status', async () => {
