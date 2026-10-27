@@ -8,6 +8,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- A call on a slow or just-woken network no longer goes silent until it times out. The SDK
+  waited 1.5 s for a relay (TURN) candidate and then sent the offer without one, which can
+  never connect. It now waits up to 8 s and, when there is still none, fails the call at once
+  with `connection-failed`.
+
 ## [0.1.7] — 2026-10-25
 
 ### Fixed

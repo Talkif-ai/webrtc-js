@@ -21,11 +21,17 @@ import { TalkifCallError, TERMINAL_CALL_STATUSES } from './types.js';
 // REST before tearing down. Silence alone is NOT proof of pipeline death.
 const PIPELINE_HEALTH_TIMEOUT_MS = 15_000;
 
-// Safety net for ICE gathering: send whatever we have if no relay candidate
-// shows up. With iceTransportPolicy 'relay' the first relay(udp) candidate is
-// all the bot needs; TURN tcp/443 allocations routinely never complete, so
-// waiting for iceGatheringState === 'complete' would stall every call.
-const ICE_FIRST_RELAY_TIMEOUT_MS = 1_500;
+// How long to wait for the first relay (TURN) candidate. With iceTransportPolicy
+// 'relay' it is all the call needs, and without one in the offer the call can
+// never connect, so the offer is not sent without it. TURN tcp/443 allocations
+// routinely never complete, so waiting for iceGatheringState === 'complete'
+// would stall every call. Long enough for a slow or just-woken network.
+const ICE_FIRST_RELAY_TIMEOUT_MS = 8_000;
+
+/** Whether an SDP lists a relay (TURN) candidate. */
+function hasRelayCandidate(sdp: string | undefined): boolean {
+	return sdp?.includes(' typ relay') ?? false;
+}
 
 // `connectionState === 'disconnected'` is transient: it fires during any
 // normal teardown (the agent hanging up) and on brief network blips, and
@@ -321,12 +327,17 @@ export class TalkifCall {
 		}
 
 		await this.waitForFirstRelayCandidate(pc);
+		if (!hasRelayCandidate(pc.localDescription?.sdp)) {
+			pc.close();
+			throw new TalkifCallError('connection-failed', 'No relay candidate: the network could not reach the TURN servers');
+		}
 		return { pc, stream };
 	}
 
 	private waitForFirstRelayCandidate(pc: RTCPeerConnection): Promise<void> {
 		return new Promise<void>((resolve) => {
-			if (pc.iceGatheringState === 'complete') {
+			// A candidate that arrived before this wait fires no event again.
+			if (pc.iceGatheringState === 'complete' || hasRelayCandidate(pc.localDescription?.sdp)) {
 				resolve();
 				return;
 			}
@@ -398,6 +409,7 @@ export class TalkifCall {
 			const offer = await this.pc.createOffer({ iceRestart: true });
 			await this.pc.setLocalDescription(offer);
 			await this.waitForFirstRelayCandidate(this.pc);
+			if (!hasRelayCandidate(this.pc.localDescription?.sdp)) throw new Error('no relay candidate');
 			const answer = await this.signaling.sendOffer(this._callId, {
 				sdp: this.mustLocalSdp(),
 				iceServers: this.iceServers,
